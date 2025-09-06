@@ -16,6 +16,9 @@ RUN apt-get update && apt-get install -y \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
+# Verify Tesseract installation
+RUN tesseract --version
+
 # Set working directory
 WORKDIR /app
 
@@ -24,9 +27,7 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy application code
-COPY app.py .
-COPY gunicorn.conf.py .
-COPY templates/ templates/
+COPY . .
 
 # Expose port
 EXPOSE 10000
