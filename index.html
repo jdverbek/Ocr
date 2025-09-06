@@ -1,0 +1,382 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Patient Number OCR Scanner</title>
+    <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 20px;
+        }
+        
+        .container {
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            padding: 30px;
+            max-width: 500px;
+            width: 100%;
+        }
+        
+        h1 {
+            color: #333;
+            margin-bottom: 30px;
+            text-align: center;
+            font-size: 24px;
+        }
+        
+        .camera-button {
+            width: 100%;
+            padding: 15px 30px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            border-radius: 10px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+        }
+        
+        .camera-button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 30px rgba(102, 126, 234, 0.4);
+        }
+        
+        .camera-button:active {
+            transform: translateY(0);
+        }
+        
+        .camera-button:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+        
+        .camera-icon {
+            width: 24px;
+            height: 24px;
+        }
+        
+        #fileInput {
+            display: none;
+        }
+        
+        .preview-section {
+            margin-top: 30px;
+            display: none;
+        }
+        
+        .preview-section.active {
+            display: block;
+        }
+        
+        .preview-image {
+            width: 100%;
+            max-height: 300px;
+            object-fit: contain;
+            border-radius: 10px;
+            margin-bottom: 20px;
+            box-shadow: 0 5px 20px rgba(0,0,0,0.1);
+        }
+        
+        .status {
+            padding: 15px;
+            border-radius: 10px;
+            margin-top: 20px;
+            text-align: center;
+            font-weight: 500;
+        }
+        
+        .status.processing {
+            background: #fff3cd;
+            color: #856404;
+            border: 1px solid #ffeeba;
+        }
+        
+        .status.success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        
+        .status.error {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+        
+        .result-box {
+            margin-top: 20px;
+            padding: 20px;
+            background: #f8f9fa;
+            border-radius: 10px;
+            border: 2px solid #dee2e6;
+        }
+        
+        .result-label {
+            font-size: 14px;
+            color: #6c757d;
+            margin-bottom: 10px;
+        }
+        
+        .result-number {
+            font-size: 24px;
+            font-weight: bold;
+            color: #333;
+            font-family: 'Courier New', monospace;
+            letter-spacing: 2px;
+        }
+        
+        .copy-button {
+            margin-top: 15px;
+            padding: 10px 20px;
+            background: #28a745;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: background 0.2s;
+        }
+        
+        .copy-button:hover {
+            background: #218838;
+        }
+        
+        .copy-button:active {
+            transform: scale(0.98);
+        }
+        
+        .progress-bar {
+            width: 100%;
+            height: 4px;
+            background: #e9ecef;
+            border-radius: 2px;
+            overflow: hidden;
+            margin-top: 10px;
+        }
+        
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            width: 0%;
+            transition: width 0.3s ease;
+        }
+        
+        .loader {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid rgba(0,0,0,0.1);
+            border-radius: 50%;
+            border-top-color: #667eea;
+            animation: spin 1s ease-in-out infinite;
+        }
+        
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>📋 Patient Number Scanner</h1>
+        
+        <button class="camera-button" id="captureBtn">
+            <svg class="camera-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"></path>
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z"></path>
+            </svg>
+            Get Patient Number from Camera
+        </button>
+        
+        <input type="file" id="fileInput" accept="image/*" capture="environment">
+        
+        <div class="preview-section" id="previewSection">
+            <img id="previewImage" class="preview-image" alt="Captured image">
+        </div>
+        
+        <div id="statusDiv"></div>
+        
+        <div id="resultDiv"></div>
+    </div>
+
+    <script>
+        let worker = null;
+        
+        // Initialize Tesseract worker
+        async function initializeWorker() {
+            if (!worker) {
+                const statusDiv = document.getElementById('statusDiv');
+                statusDiv.innerHTML = '<div class="status processing">Initializing OCR engine...</div>';
+                
+                worker = await Tesseract.createWorker({
+                    logger: m => {
+                        if (m.status === 'recognizing text') {
+                            const progress = Math.round(m.progress * 100);
+                            statusDiv.innerHTML = `
+                                <div class="status processing">
+                                    <div style="display: flex; align-items: center; justify-content: center; gap: 10px;">
+                                        <span class="loader"></span>
+                                        <span>Processing image... ${progress}%</span>
+                                    </div>
+                                    <div class="progress-bar">
+                                        <div class="progress-fill" style="width: ${progress}%"></div>
+                                    </div>
+                                </div>
+                            `;
+                        }
+                    }
+                });
+                
+                await worker.loadLanguage('eng');
+                await worker.initialize('eng');
+                
+                // Configure for better number recognition
+                await worker.setParameters({
+                    tessedit_char_whitelist: '0123456789',
+                    tessedit_pageseg_mode: Tesseract.PSM.SPARSE_TEXT
+                });
+                
+                statusDiv.innerHTML = '';
+            }
+            return worker;
+        }
+        
+        // Find 10-digit number in text
+        function findPatientNumber(text) {
+            // Remove all non-digit characters and find sequences of exactly 10 digits
+            const cleanText = text.replace(/\D/g, ' ');
+            const matches = cleanText.match(/\b\d{10}\b/g);
+            
+            if (matches && matches.length > 0) {
+                return matches[0]; // Return the first 10-digit number found
+            }
+            
+            // If no exact 10-digit sequence, look for any 10 consecutive digits
+            const allDigits = text.replace(/\D/g, '');
+            if (allDigits.length >= 10) {
+                // Find the first occurrence of 10 consecutive digits
+                for (let i = 0; i <= allDigits.length - 10; i++) {
+                    const candidate = allDigits.substr(i, 10);
+                    if (candidate.length === 10) {
+                        return candidate;
+                    }
+                }
+            }
+            
+            return null;
+        }
+        
+        // Process the image
+        async function processImage(file) {
+            const previewSection = document.getElementById('previewSection');
+            const previewImage = document.getElementById('previewImage');
+            const statusDiv = document.getElementById('statusDiv');
+            const resultDiv = document.getElementById('resultDiv');
+            const captureBtn = document.getElementById('captureBtn');
+            
+            // Show preview
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                previewImage.src = e.target.result;
+                previewSection.classList.add('active');
+            };
+            reader.readAsDataURL(file);
+            
+            // Disable button during processing
+            captureBtn.disabled = true;
+            
+            try {
+                // Initialize worker if needed
+                const ocrWorker = await initializeWorker();
+                
+                // Process image
+                statusDiv.innerHTML = '<div class="status processing"><span class="loader"></span> Scanning for patient number...</div>';
+                
+                const { data: { text } } = await ocrWorker.recognize(file);
+                
+                console.log('OCR Result:', text); // For debugging
+                
+                const patientNumber = findPatientNumber(text);
+                
+                if (patientNumber) {
+                    statusDiv.innerHTML = '<div class="status success">✅ Patient number found!</div>';
+                    resultDiv.innerHTML = `
+                        <div class="result-box">
+                            <div class="result-label">Patient Number:</div>
+                            <div class="result-number" id="patientNumber">${patientNumber}</div>
+                            <button class="copy-button" onclick="copyToClipboard()">
+                                📋 Copy to Clipboard
+                            </button>
+                        </div>
+                    `;
+                } else {
+                    statusDiv.innerHTML = '<div class="status error">❌ No 10-digit patient number found. Please try again with a clearer image.</div>';
+                    resultDiv.innerHTML = '';
+                }
+            } catch (error) {
+                console.error('OCR Error:', error);
+                statusDiv.innerHTML = '<div class="status error">❌ Error processing image. Please try again.</div>';
+                resultDiv.innerHTML = '';
+            } finally {
+                captureBtn.disabled = false;
+            }
+        }
+        
+        // Copy to clipboard function
+        function copyToClipboard() {
+            const patientNumber = document.getElementById('patientNumber').textContent;
+            navigator.clipboard.writeText(patientNumber).then(() => {
+                const button = event.target;
+                const originalText = button.textContent;
+                button.textContent = '✅ Copied!';
+                button.style.background = '#28a745';
+                setTimeout(() => {
+                    button.textContent = originalText;
+                    button.style.background = '';
+                }, 2000);
+            }).catch(err => {
+                console.error('Failed to copy:', err);
+                alert('Failed to copy. Please select and copy manually.');
+            });
+        }
+        
+        // Event listeners
+        document.getElementById('captureBtn').addEventListener('click', () => {
+            document.getElementById('fileInput').click();
+        });
+        
+        document.getElementById('fileInput').addEventListener('change', (event) => {
+            const file = event.target.files[0];
+            if (file) {
+                processImage(file);
+            }
+        });
+        
+        // Pre-initialize worker when page loads (optional, for faster first scan)
+        window.addEventListener('load', () => {
+            // Uncomment the next line to pre-initialize the OCR engine
+            // initializeWorker();
+        });
+    </script>
+</body>
+</html>
+
