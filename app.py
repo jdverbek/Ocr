@@ -37,7 +37,7 @@ def api_status():
 
 def simple_digit_extraction(image):
     """
-    Fallback OCR method using basic image processing and pattern recognition
+    Fallback OCR method using basic image processing
     when Tesseract is not available
     """
     try:
@@ -50,22 +50,20 @@ def simple_digit_extraction(image):
         # Apply thresholding
         _, thresh = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
         
-        # Find contours
+        # Find contours for text regions
         contours, _ = cv2.findContours(thresh, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
         
-        # This is a simplified approach - in a real implementation,
-        # you would use more sophisticated pattern matching
-        # For now, we'll return a mock result to test the pipeline
-        
         # Look for rectangular regions that might contain text
-        potential_text_regions = []
+        text_regions = []
         for contour in contours:
             x, y, w, h = cv2.boundingRect(contour)
-            if w > 50 and h > 10 and w/h > 2:  # Likely text region
-                potential_text_regions.append((x, y, w, h))
+            if w > 30 and h > 8 and 2 <= w/h <= 15:  # Likely text region
+                text_regions.append((x, y, w, h))
         
-        # Return None to indicate fallback couldn't extract text
-        # This will force the main function to process the raw OCR text properly
+        text_regions.sort(key=lambda r: (r[1], r[0]))
+        
+        if len(text_regions) > 0:
+            return "FALLBACK_ATTEMPTED"
         
         return None
         
@@ -101,51 +99,29 @@ def process_ocr():
         
         if TESSERACT_AVAILABLE:
             try:
-                # Try multiple OCR configurations for better results
-                configs = [
-                    r'--oem 3 --psm 6',  # Default configuration
-                    r'--oem 3 --psm 8',  # Single word
-                    r'--oem 3 --psm 7',  # Single text line
-                    r'--oem 3 --psm 11', # Sparse text
-                    r'--oem 3 --psm 13'  # Raw line
-                ]
+                digit_config = r'--oem 3 --psm 8 -c tessedit_char_whitelist=0123456789'
+                text = pytesseract.image_to_string(processed_image, config=digit_config).strip()
                 
-                # Try each configuration until we get text
-                for config in configs:
-                    try:
-                        text = pytesseract.image_to_string(processed_image, config=config).strip()
-                        if text:
-                            print(f"OCR successful with config: {config}")
-                            print(f"Extracted text: {text}")
-                            break
-                    except Exception as config_error:
-                        print(f"Config {config} failed: {config_error}")
-                        continue
+                if not text or not any(c.isdigit() for c in text):
+                    text = pytesseract.image_to_string(processed_image, config=r'--oem 3 --psm 6').strip()
                 
-                # If no text found with processed image, try original
+                # If still no text, try original image
                 if not text:
-                    print("Trying OCR on original image...")
-                    for config in configs:
-                        try:
-                            text = pytesseract.image_to_string(image, config=config).strip()
-                            if text:
-                                print(f"OCR successful on original with config: {config}")
-                                print(f"Extracted text: {text}")
-                                break
-                        except Exception as config_error:
-                            continue
-                            
+                    text = pytesseract.image_to_string(image, config=digit_config).strip()
+                    
             except Exception as tesseract_error:
                 print(f"Tesseract error: {tesseract_error}")
                 # Fall back to simple extraction
                 fallback_result = simple_digit_extraction(processed_image)
-                if fallback_result:
+                if fallback_result and fallback_result != "FALLBACK_ATTEMPTED":
                     text = fallback_result
         else:
             # Use fallback method
             fallback_result = simple_digit_extraction(processed_image)
-            if fallback_result:
+            if fallback_result and fallback_result != "FALLBACK_ATTEMPTED":
                 text = fallback_result
+            else:
+                text = ""
         
         # Find 10-digit patient number with improved pattern matching
         # First, try to find exactly 10 consecutive digits
