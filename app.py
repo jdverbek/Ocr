@@ -35,43 +35,6 @@ def api_status():
         "status": "operational"
     })
 
-def simple_digit_extraction(image):
-    """
-    Fallback OCR method using basic image processing and pattern recognition
-    when Tesseract is not available
-    """
-    try:
-        # Convert PIL image to OpenCV format
-        opencv_image = cv2.cvtColor(np.array(image), cv2.COLOR_RGB2BGR)
-        
-        # Convert to grayscale
-        gray = cv2.cvtColor(opencv_image, cv2.COLOR_BGR2GRAY)
-        
-        # Apply thresholding
-        _, thresh = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
-        
-        # Find contours
-        contours, _ = cv2.findContours(thresh, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-        
-        # This is a simplified approach - in a real implementation,
-        # you would use more sophisticated pattern matching
-        # For now, we'll return a mock result to test the pipeline
-        
-        # Look for rectangular regions that might contain text
-        potential_text_regions = []
-        for contour in contours:
-            x, y, w, h = cv2.boundingRect(contour)
-            if w > 50 and h > 10 and w/h > 2:  # Likely text region
-                potential_text_regions.append((x, y, w, h))
-        
-        # Return None to indicate fallback couldn't extract text
-        # This will force the main function to process the raw OCR text properly
-        
-        return None
-        
-    except Exception as e:
-        print(f"Fallback OCR error: {e}")
-        return None
 
 @app.route('/process_ocr', methods=['POST'])
 def process_ocr():
@@ -79,42 +42,40 @@ def process_ocr():
         data = request.get_json()
         image_data = base64.b64decode(data['image'])
         
-        # Convert to PIL Image
+        # Convert to PIL Image once
         image = Image.open(BytesIO(image_data))
         
-        # Convert to OpenCV format for preprocessing
-        opencv_image = cv2.cvtColor(np.array(image), cv2.COLOR_RGB2BGR)
+        # Convert to grayscale directly with PIL (more efficient)
+        if image.mode != 'L':
+            gray_image = image.convert('L')
+        else:
+            gray_image = image
         
-        # Preprocess image for better OCR
-        gray = cv2.cvtColor(opencv_image, cv2.COLOR_BGR2GRAY)
+        # Convert to numpy array for OpenCV operations (single conversion)
+        gray_array = np.array(gray_image)
         
-        # Apply thresholding to get better contrast
-        _, thresh = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+        # Apply thresholding and denoising in one pipeline
+        _, thresh = cv2.threshold(gray_array, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+        processed_array = cv2.medianBlur(thresh, 3)
         
-        # Denoise
-        denoised = cv2.medianBlur(thresh, 3)
-        
-        # Convert back to PIL Image
-        processed_image = Image.fromarray(denoised)
+        # Convert back to PIL Image once
+        processed_image = Image.fromarray(processed_array)
         
         text = ""
         
         if TESSERACT_AVAILABLE:
             try:
-                # Try multiple OCR configurations for better results
                 configs = [
+                    r'--oem 3 --psm 8',  # Single word - most effective for patient numbers
                     r'--oem 3 --psm 6',  # Default configuration
-                    r'--oem 3 --psm 8',  # Single word
                     r'--oem 3 --psm 7',  # Single text line
                     r'--oem 3 --psm 11', # Sparse text
-                    r'--oem 3 --psm 13'  # Raw line
                 ]
                 
-                # Try each configuration until we get text
                 for config in configs:
                     try:
                         text = pytesseract.image_to_string(processed_image, config=config).strip()
-                        if text:
+                        if text and re.search(r'\d{8,}', text):  # Early termination if digits found
                             print(f"OCR successful with config: {config}")
                             print(f"Extracted text: {text}")
                             break
@@ -122,13 +83,12 @@ def process_ocr():
                         print(f"Config {config} failed: {config_error}")
                         continue
                 
-                # If no text found with processed image, try original
-                if not text:
+                if not text or not re.search(r'\d{8,}', text):
                     print("Trying OCR on original image...")
                     for config in configs:
                         try:
-                            text = pytesseract.image_to_string(image, config=config).strip()
-                            if text:
+                            text = pytesseract.image_to_string(gray_image, config=config).strip()
+                            if text and re.search(r'\d{8,}', text):
                                 print(f"OCR successful on original with config: {config}")
                                 print(f"Extracted text: {text}")
                                 break
@@ -137,15 +97,10 @@ def process_ocr():
                             
             except Exception as tesseract_error:
                 print(f"Tesseract error: {tesseract_error}")
-                # Fall back to simple extraction
-                fallback_result = simple_digit_extraction(processed_image)
-                if fallback_result:
-                    text = fallback_result
+                text = ""
         else:
-            # Use fallback method
-            fallback_result = simple_digit_extraction(processed_image)
-            if fallback_result:
-                text = fallback_result
+            # Fallback when Tesseract is not available
+            text = ""
         
         # Find 10-digit patient number with improved pattern matching
         # First, try to find exactly 10 consecutive digits
