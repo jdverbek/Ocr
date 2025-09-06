@@ -4,7 +4,6 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Patient Number OCR Scanner</title>
-    <script src="https://cdn.jsdelivr.net/npm/tesseract.js@4/dist/tesseract.min.js"></script>
     <style>
         * {
             margin: 0;
@@ -58,10 +57,6 @@
         .camera-button:hover {
             transform: translateY(-2px);
             box-shadow: 0 10px 30px rgba(102, 126, 234, 0.4);
-        }
-        
-        .camera-button:active {
-            transform: translateY(0);
         }
         
         .camera-button:disabled {
@@ -122,16 +117,6 @@
             border: 1px solid #f5c6cb;
         }
         
-        .status.debug {
-            background: #e2e3e5;
-            color: #383d41;
-            border: 1px solid #d6d8db;
-            font-size: 12px;
-            text-align: left;
-            white-space: pre-wrap;
-            font-family: monospace;
-        }
-        
         .result-box {
             margin-top: 20px;
             padding: 20px;
@@ -170,26 +155,6 @@
             background: #218838;
         }
         
-        .copy-button:active {
-            transform: scale(0.98);
-        }
-        
-        .progress-bar {
-            width: 100%;
-            height: 4px;
-            background: #e9ecef;
-            border-radius: 2px;
-            overflow: hidden;
-            margin-top: 10px;
-        }
-        
-        .progress-fill {
-            height: 100%;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            width: 0%;
-            transition: width 0.3s ease;
-        }
-        
         .loader {
             display: inline-block;
             width: 20px;
@@ -204,44 +169,22 @@
             to { transform: rotate(360deg); }
         }
         
-        .debug-panel {
-            margin-top: 20px;
-            padding: 15px;
-            background: #f8f9fa;
-            border-radius: 10px;
-            border: 1px solid #dee2e6;
-            max-height: 300px;
-            overflow-y: auto;
-        }
-        
-        .debug-title {
-            font-weight: bold;
-            margin-bottom: 10px;
-            color: #495057;
-        }
-        
-        .debug-log {
-            font-family: monospace;
-            font-size: 11px;
-            color: #6c757d;
-            white-space: pre-wrap;
-            line-height: 1.4;
-        }
-        
-        .clear-logs-btn {
-            margin-top: 10px;
-            padding: 5px 10px;
-            background: #6c757d;
+        .server-badge {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            background: #28a745;
             color: white;
-            border: none;
-            border-radius: 3px;
+            padding: 5px 10px;
+            border-radius: 15px;
             font-size: 12px;
-            cursor: pointer;
+            font-weight: 500;
         }
     </style>
 </head>
 <body>
     <div class="container">
+        <div class="server-badge">Server-side OCR</div>
         <h1>📋 Patient Number Scanner</h1>
         
         <button class="camera-button" id="captureBtn">
@@ -259,273 +202,11 @@
         </div>
         
         <div id="statusDiv"></div>
-        
         <div id="resultDiv"></div>
-        
-        <div class="debug-panel">
-            <div class="debug-title">🐛 Debug Logs</div>
-            <div class="debug-log" id="debugLog"></div>
-            <button class="clear-logs-btn" onclick="clearDebugLogs()">Clear Logs</button>
-        </div>
     </div>
 
     <script>
-        // Enhanced logging system
-        class DebugLogger {
-            constructor() {
-                this.logs = [];
-                this.logElement = document.getElementById('debugLog');
-                this.startTime = Date.now();
-            }
-            
-            log(level, message, data = null) {
-                const timestamp = new Date().toISOString();
-                const elapsed = Date.now() - this.startTime;
-                const logEntry = {
-                    timestamp,
-                    elapsed,
-                    level,
-                    message,
-                    data
-                };
-                
-                this.logs.push(logEntry);
-                
-                // Console logging
-                const consoleMethod = level === 'error' ? 'error' : level === 'warn' ? 'warn' : 'log';
-                console[consoleMethod](`[${elapsed}ms] ${level.toUpperCase()}: ${message}`, data || '');
-                
-                // UI logging
-                this.updateUI();
-            }
-            
-            updateUI() {
-                const recent = this.logs.slice(-50); // Show last 50 logs
-                const logText = recent.map(log => 
-                    `[${log.elapsed}ms] ${log.level.toUpperCase()}: ${log.message}${log.data ? '\n  Data: ' + JSON.stringify(log.data, null, 2) : ''}`
-                ).join('\n');
-                
-                this.logElement.textContent = logText;
-                this.logElement.scrollTop = this.logElement.scrollHeight;
-            }
-            
-            info(message, data) { this.log('info', message, data); }
-            warn(message, data) { this.log('warn', message, data); }
-            error(message, data) { this.log('error', message, data); }
-            debug(message, data) { this.log('debug', message, data); }
-        }
-        
-        const logger = new DebugLogger();
-        
-        function clearDebugLogs() {
-            logger.logs = [];
-            logger.updateUI();
-        }
-        
-        // Global error handling
-        window.addEventListener('error', (event) => {
-            logger.error('Global JavaScript Error', {
-                message: event.message,
-                filename: event.filename,
-                lineno: event.lineno,
-                colno: event.colno,
-                error: event.error?.stack
-            });
-        });
-        
-        window.addEventListener('unhandledrejection', (event) => {
-            logger.error('Unhandled Promise Rejection', {
-                reason: event.reason,
-                stack: event.reason?.stack
-            });
-        });
-        
-        // Network monitoring
-        const originalFetch = window.fetch;
-        window.fetch = function(...args) {
-            logger.info('Network Request', { url: args[0], options: args[1] });
-            return originalFetch.apply(this, args)
-                .then(response => {
-                    logger.info('Network Response', { 
-                        url: args[0], 
-                        status: response.status, 
-                        ok: response.ok 
-                    });
-                    return response;
-                })
-                .catch(error => {
-                    logger.error('Network Error', { url: args[0], error: error.message });
-                    throw error;
-                });
-        };
-        
-        let worker = null;
-        
-        // Initialize logging
-        logger.info('Application Starting', {
-            userAgent: navigator.userAgent,
-            url: window.location.href,
-            tesseractAvailable: typeof Tesseract !== 'undefined'
-        });
-        
-        // Check Tesseract availability
-        if (typeof Tesseract === 'undefined') {
-            logger.error('Tesseract.js not loaded', { 
-                scriptSrc: 'https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js' 
-            });
-        } else {
-            logger.info('Tesseract.js loaded successfully', {
-                version: Tesseract.version || 'unknown',
-                methods: Object.keys(Tesseract)
-            });
-        }
-        
-        // Initialize Tesseract worker with extensive logging and mobile Safari fixes
-        async function initializeWorker() {
-            if (!worker) {
-                logger.info('Starting OCR worker initialization');
-                const statusDiv = document.getElementById('statusDiv');
-                statusDiv.innerHTML = '<div class="status processing">Initializing OCR engine...</div>';
-                
-                try {
-                    logger.info('Creating Tesseract worker with mobile Safari compatibility');
-                    
-                    // Mobile Safari compatibility: Use different worker options
-                    const workerOptions = {
-                        logger: m => {
-                            logger.debug('Tesseract Logger', m);
-                            if (m.status === 'recognizing text') {
-                                const progress = Math.round(m.progress * 100);
-                                statusDiv.innerHTML = `
-                                    <div class="status processing">
-                                        <div style="display: flex; align-items: center; justify-content: center; gap: 10px;">
-                                            <span class="loader"></span>
-                                            <span>Processing image... ${progress}%</span>
-                                        </div>
-                                        <div class="progress-bar">
-                                            <div class="progress-fill" style="width: ${progress}%"></div>
-                                        </div>
-                                    </div>
-                                `;
-                            }
-                        },
-                        errorHandler: (error) => {
-                            logger.error('Tesseract Worker Error', error);
-                        }
-                    };
-                    
-                    // For mobile Safari, try without Web Workers first
-                    if (/iPhone|iPad|iPod|Safari/i.test(navigator.userAgent) && !/Chrome/i.test(navigator.userAgent)) {
-                        logger.info('Mobile Safari detected, using compatibility mode');
-                        workerOptions.corePath = 'https://cdn.jsdelivr.net/npm/tesseract.js@4/dist/tesseract-core.wasm.js';
-                    }
-                    
-                    worker = await Tesseract.createWorker(workerOptions);
-                    logger.info('Tesseract worker created successfully');
-                    
-                    logger.info('Loading English language');
-                    await worker.loadLanguage('eng');
-                    logger.info('Language loaded successfully');
-                    
-                    logger.info('Initializing worker');
-                    await worker.initialize('eng');
-                    logger.info('Worker initialized successfully');
-                    
-                    logger.info('Setting OCR parameters');
-                    await worker.setParameters({
-                        tessedit_char_whitelist: '0123456789',
-                        tessedit_pageseg_mode: Tesseract.PSM.SPARSE_TEXT
-                    });
-                    logger.info('Parameters set successfully');
-                    
-                    statusDiv.innerHTML = '';
-                    logger.info('OCR worker initialization completed');
-                    
-                } catch (error) {
-                    logger.error('OCR worker initialization failed', {
-                        message: error.message,
-                        stack: error.stack,
-                        name: error.name
-                    });
-                    
-                    // Try fallback initialization for mobile Safari
-                    if (/iPhone|iPad|iPod|Safari/i.test(navigator.userAgent) && !worker) {
-                        logger.info('Attempting fallback initialization for mobile Safari');
-                        try {
-                            worker = await Tesseract.createWorker({
-                                logger: m => logger.debug('Tesseract Fallback Logger', m),
-                                workerPath: 'https://cdn.jsdelivr.net/npm/tesseract.js@4/dist/worker.min.js',
-                                corePath: 'https://cdn.jsdelivr.net/npm/tesseract.js@4/dist/tesseract-core.wasm.js'
-                            });
-                            await worker.loadLanguage('eng');
-                            await worker.initialize('eng');
-                            await worker.setParameters({
-                                tesseract_pageseg_mode: '6',
-                                tessedit_char_whitelist: '0123456789'
-                            });
-                            statusDiv.innerHTML = '';
-                            logger.info('Fallback initialization successful');
-                        } catch (fallbackError) {
-                            logger.error('Fallback initialization also failed', fallbackError);
-                            statusDiv.innerHTML = '<div class="status error">❌ OCR initialization failed. This may be due to browser compatibility issues. Please try using Chrome or updating your browser.</div>';
-                            throw fallbackError;
-                        }
-                    } else {
-                        statusDiv.innerHTML = '<div class="status error">❌ Failed to initialize OCR engine. Check debug logs for details.</div>';
-                        throw error;
-                    }
-                }
-            }
-            return worker;
-        }
-        
-        // Find 10-digit number in text with logging
-        function findPatientNumber(text) {
-            logger.info('Searching for patient number in text', { 
-                textLength: text.length,
-                textPreview: text.substring(0, 100) + (text.length > 100 ? '...' : '')
-            });
-            
-            // Remove all non-digit characters and find sequences of exactly 10 digits
-            const cleanText = text.replace(/\D/g, ' ');
-            logger.debug('Cleaned text for digit search', { cleanText });
-            
-            const matches = cleanText.match(/\b\d{10}\b/g);
-            logger.debug('10-digit pattern matches', { matches });
-            
-            if (matches && matches.length > 0) {
-                logger.info('Found 10-digit patient number', { number: matches[0] });
-                return matches[0]; // Return the first 10-digit number found
-            }
-            
-            // If no exact 10-digit sequence, look for any 10 consecutive digits
-            const allDigits = text.replace(/\D/g, '');
-            logger.debug('All digits extracted', { allDigits, length: allDigits.length });
-            
-            if (allDigits.length >= 10) {
-                // Find the first occurrence of 10 consecutive digits
-                for (let i = 0; i <= allDigits.length - 10; i++) {
-                    const candidate = allDigits.substr(i, 10);
-                    if (candidate.length === 10) {
-                        logger.info('Found 10 consecutive digits', { number: candidate, position: i });
-                        return candidate;
-                    }
-                }
-            }
-            
-            logger.warn('No patient number found in text');
-            return null;
-        }
-        
-        // Process the image with extensive logging
         async function processImage(file) {
-            logger.info('Starting image processing', {
-                fileName: file.name,
-                fileSize: file.size,
-                fileType: file.type,
-                lastModified: new Date(file.lastModified).toISOString()
-            });
-            
             const previewSection = document.getElementById('previewSection');
             const previewImage = document.getElementById('previewImage');
             const statusDiv = document.getElementById('statusDiv');
@@ -533,132 +214,116 @@
             const captureBtn = document.getElementById('captureBtn');
             
             // Show preview
-            logger.info('Creating image preview');
             const reader = new FileReader();
             reader.onload = function(e) {
-                logger.info('Image loaded for preview', { dataUrlLength: e.target.result.length });
                 previewImage.src = e.target.result;
                 previewSection.classList.add('active');
-            };
-            reader.onerror = function(e) {
-                logger.error('FileReader error', e);
             };
             reader.readAsDataURL(file);
             
             // Disable button during processing
             captureBtn.disabled = true;
-            logger.info('Button disabled for processing');
+            statusDiv.innerHTML = '<div class="status processing"><span class="loader"></span> Processing image on server...</div>';
             
-            try {
-                // Initialize worker if needed
-                logger.info('Initializing OCR worker');
-                const ocrWorker = await initializeWorker();
+            // Convert to base64 and send to server
+            const fileReader = new FileReader();
+            fileReader.onload = async function(e) {
+                const base64Image = e.target.result.split(',')[1];
                 
-                // Process image
-                logger.info('Starting OCR recognition');
-                statusDiv.innerHTML = '<div class="status processing"><span class="loader"></span> Scanning for patient number...</div>';
-                
-                const startTime = Date.now();
-                const { data: { text } } = await ocrWorker.recognize(file);
-                const processingTime = Date.now() - startTime;
-                
-                logger.info('OCR recognition completed', {
-                    processingTime: processingTime + 'ms',
-                    textLength: text.length,
-                    textPreview: text.substring(0, 200) + (text.length > 200 ? '...' : '')
-                });
-                
-                const patientNumber = findPatientNumber(text);
-                
-                if (patientNumber) {
-                    logger.info('Patient number extraction successful', { patientNumber });
-                    statusDiv.innerHTML = '<div class="status success">✅ Patient number found!</div>';
-                    resultDiv.innerHTML = `
-                        <div class="result-box">
-                            <div class="result-label">Patient Number:</div>
-                            <div class="result-number" id="patientNumber">${patientNumber}</div>
-                            <button class="copy-button" onclick="copyToClipboard()">
-                                📋 Copy to Clipboard
-                            </button>
-                        </div>
-                    `;
-                } else {
-                    logger.warn('No patient number found in OCR result');
-                    statusDiv.innerHTML = '<div class="status error">❌ No 10-digit patient number found. Please try again with a clearer image.</div>';
+                try {
+                    const response = await fetch('/process_ocr', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({ image: base64Image })
+                    });
+                    
+                    const result = await response.json();
+                    
+                    if (result.success && result.patient_number) {
+                        statusDiv.innerHTML = '<div class="status success">✅ Patient number found!</div>';
+                        resultDiv.innerHTML = `
+                            <div class="result-box">
+                                <div class="result-label">Patient Number:</div>
+                                <div class="result-number" id="patientNumber">${result.patient_number}</div>
+                                <button class="copy-button" onclick="copyToClipboard()">
+                                    📋 Copy to Clipboard
+                                </button>
+                            </div>
+                        `;
+                    } else {
+                        statusDiv.innerHTML = '<div class="status error">❌ No 10-digit patient number found. Please try again with a clearer image.</div>';
+                        resultDiv.innerHTML = '';
+                    }
+                } catch (error) {
+                    console.error('OCR Error:', error);
+                    statusDiv.innerHTML = '<div class="status error">❌ Error processing image. Please try again.</div>';
                     resultDiv.innerHTML = '';
+                } finally {
+                    captureBtn.disabled = false;
                 }
-            } catch (error) {
-                logger.error('Image processing failed', {
-                    message: error.message,
-                    stack: error.stack,
-                    name: error.name
+            };
+            fileReader.readAsDataURL(file);
+        }
+        
+        function copyToClipboard() {
+            const patientNumber = document.getElementById('patientNumber').textContent;
+            
+            // Try modern clipboard API first
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+                navigator.clipboard.writeText(patientNumber).then(() => {
+                    showCopySuccess();
+                }).catch(() => {
+                    fallbackCopy(patientNumber);
                 });
-                statusDiv.innerHTML = '<div class="status error">❌ Error processing image. Check debug logs for details.</div>';
-                resultDiv.innerHTML = '';
-            } finally {
-                captureBtn.disabled = false;
-                logger.info('Button re-enabled');
+            } else {
+                fallbackCopy(patientNumber);
             }
         }
         
-        // Copy to clipboard function with logging
-        function copyToClipboard() {
-            logger.info('Copy to clipboard requested');
-            const patientNumber = document.getElementById('patientNumber').textContent;
-            
-            navigator.clipboard.writeText(patientNumber).then(() => {
-                logger.info('Text copied to clipboard successfully', { text: patientNumber });
-                const button = event.target;
-                const originalText = button.textContent;
-                button.textContent = '✅ Copied!';
-                button.style.background = '#28a745';
-                setTimeout(() => {
-                    button.textContent = originalText;
-                    button.style.background = '';
-                }, 2000);
-            }).catch(err => {
-                logger.error('Failed to copy to clipboard', {
-                    error: err.message,
-                    stack: err.stack
-                });
-                alert('Failed to copy. Please select and copy manually.');
-            });
+        function showCopySuccess() {
+            const button = event.target;
+            const originalText = button.textContent;
+            button.textContent = '✅ Copied!';
+            button.style.background = '#28a745';
+            setTimeout(() => {
+                button.textContent = originalText;
+                button.style.background = '';
+            }, 2000);
         }
         
-        // Event listeners with logging
+        function fallbackCopy(text) {
+            // Fallback for iOS Safari
+            const textArea = document.createElement('textarea');
+            textArea.value = text;
+            textArea.style.position = 'fixed';
+            textArea.style.opacity = '0';
+            document.body.appendChild(textArea);
+            textArea.focus();
+            textArea.select();
+            
+            try {
+                document.execCommand('copy');
+                showCopySuccess();
+            } catch (err) {
+                alert('Please manually copy: ' + text);
+            }
+            
+            document.body.removeChild(textArea);
+        }
+        
+        // Event listeners
         document.getElementById('captureBtn').addEventListener('click', () => {
-            logger.info('Capture button clicked');
             document.getElementById('fileInput').click();
         });
         
         document.getElementById('fileInput').addEventListener('change', (event) => {
-            logger.info('File input changed', { 
-                filesCount: event.target.files.length 
-            });
             const file = event.target.files[0];
             if (file) {
                 processImage(file);
-            } else {
-                logger.warn('No file selected');
             }
         });
-        
-        // Page load completion
-        window.addEventListener('load', () => {
-            logger.info('Page fully loaded');
-            // Uncomment the next line to pre-initialize the OCR engine
-            // initializeWorker();
-        });
-        
-        // Page visibility changes
-        document.addEventListener('visibilitychange', () => {
-            logger.info('Page visibility changed', { 
-                hidden: document.hidden,
-                visibilityState: document.visibilityState 
-            });
-        });
-        
-        logger.info('Script initialization completed');
     </script>
 </body>
 </html>
