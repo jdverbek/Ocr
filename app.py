@@ -101,9 +101,40 @@ def process_ocr():
         
         if TESSERACT_AVAILABLE:
             try:
-                # Perform OCR with digit-only configuration
-                custom_config = r'--oem 3 --psm 6 -c tessedit_char_whitelist=0123456789'
-                text = pytesseract.image_to_string(processed_image, config=custom_config)
+                # Try multiple OCR configurations for better results
+                configs = [
+                    r'--oem 3 --psm 6',  # Default configuration
+                    r'--oem 3 --psm 8',  # Single word
+                    r'--oem 3 --psm 7',  # Single text line
+                    r'--oem 3 --psm 11', # Sparse text
+                    r'--oem 3 --psm 13'  # Raw line
+                ]
+                
+                # Try each configuration until we get text
+                for config in configs:
+                    try:
+                        text = pytesseract.image_to_string(processed_image, config=config).strip()
+                        if text:
+                            print(f"OCR successful with config: {config}")
+                            print(f"Extracted text: {text}")
+                            break
+                    except Exception as config_error:
+                        print(f"Config {config} failed: {config_error}")
+                        continue
+                
+                # If no text found with processed image, try original
+                if not text:
+                    print("Trying OCR on original image...")
+                    for config in configs:
+                        try:
+                            text = pytesseract.image_to_string(image, config=config).strip()
+                            if text:
+                                print(f"OCR successful on original with config: {config}")
+                                print(f"Extracted text: {text}")
+                                break
+                        except Exception as config_error:
+                            continue
+                            
             except Exception as tesseract_error:
                 print(f"Tesseract error: {tesseract_error}")
                 # Fall back to simple extraction
