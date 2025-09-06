@@ -211,8 +211,29 @@ During testing with real-world medical card images, the optimized OCR pipeline f
 - ✅ Synthetic image regression test: **PASS**
 - ✅ Error screen graceful failure: **PASS**
 
+## Merge Conflict Resolution
+
+### Issue
+The main branch was updated with "Clean up over-engineered OCR code (#2)" which simplified the OCR approach, creating conflicts with my medical card robustness enhancements.
+
+### Resolution Strategy
+Successfully integrated both approaches by:
+1. **Preserving medical card functionality**: Kept enhanced `extract_patient_number` with pattern matching
+2. **Adopting main branch improvements**: Used simplified OCR config approach (`--oem 3 --psm 8` with digit whitelist)
+3. **Combining preprocessing strategies**: Multi-stage preprocessing with simplified OCR configs
+4. **Maintaining fallback logic**: Added `simple_digit_extraction` from main branch
+
+### Verification Results
+✅ **All tests passed after conflict resolution:**
+- Medical card extracts "3912171035" correctly
+- Synthetic image regression test passes  
+- Error screen handling works properly
+- Performance optimizations preserved
+
 ## Conclusion
 
 The identified optimizations can significantly improve the application's performance while maintaining the same functionality and accuracy. The most impactful change is eliminating redundant image format conversions, which alone can reduce processing time by 30-40%.
 
 The additional medical card robustness improvements ensure the application works reliably with real-world images while preserving the efficiency gains from the core optimizations.
+
+**Final Status**: Merge conflicts successfully resolved. PR #1 is ready for merge with all functionality preserved and enhanced.
