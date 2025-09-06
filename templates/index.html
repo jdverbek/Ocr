@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Patient Number OCR Scanner</title>
-    <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/tesseract.js@4/dist/tesseract.min.js"></script>
     <style>
         * {
             margin: 0;
@@ -380,7 +380,7 @@
             });
         }
         
-        // Initialize Tesseract worker with extensive logging
+        // Initialize Tesseract worker with extensive logging and mobile Safari fixes
         async function initializeWorker() {
             if (!worker) {
                 logger.info('Starting OCR worker initialization');
@@ -388,8 +388,10 @@
                 statusDiv.innerHTML = '<div class="status processing">Initializing OCR engine...</div>';
                 
                 try {
-                    logger.info('Creating Tesseract worker');
-                    worker = await Tesseract.createWorker({
+                    logger.info('Creating Tesseract worker with mobile Safari compatibility');
+                    
+                    // Mobile Safari compatibility: Use different worker options
+                    const workerOptions = {
                         logger: m => {
                             logger.debug('Tesseract Logger', m);
                             if (m.status === 'recognizing text') {
@@ -410,7 +412,15 @@
                         errorHandler: (error) => {
                             logger.error('Tesseract Worker Error', error);
                         }
-                    });
+                    };
+                    
+                    // For mobile Safari, try without Web Workers first
+                    if (/iPhone|iPad|iPod|Safari/i.test(navigator.userAgent) && !/Chrome/i.test(navigator.userAgent)) {
+                        logger.info('Mobile Safari detected, using compatibility mode');
+                        workerOptions.corePath = 'https://cdn.jsdelivr.net/npm/tesseract.js@4/dist/tesseract-core.wasm.js';
+                    }
+                    
+                    worker = await Tesseract.createWorker(workerOptions);
                     logger.info('Tesseract worker created successfully');
                     
                     logger.info('Loading English language');
@@ -437,8 +447,33 @@
                         stack: error.stack,
                         name: error.name
                     });
-                    statusDiv.innerHTML = '<div class="status error">❌ Failed to initialize OCR engine. Check debug logs for details.</div>';
-                    throw error;
+                    
+                    // Try fallback initialization for mobile Safari
+                    if (/iPhone|iPad|iPod|Safari/i.test(navigator.userAgent) && !worker) {
+                        logger.info('Attempting fallback initialization for mobile Safari');
+                        try {
+                            worker = await Tesseract.createWorker({
+                                logger: m => logger.debug('Tesseract Fallback Logger', m),
+                                workerPath: 'https://cdn.jsdelivr.net/npm/tesseract.js@4/dist/worker.min.js',
+                                corePath: 'https://cdn.jsdelivr.net/npm/tesseract.js@4/dist/tesseract-core.wasm.js'
+                            });
+                            await worker.loadLanguage('eng');
+                            await worker.initialize('eng');
+                            await worker.setParameters({
+                                tesseract_pageseg_mode: '6',
+                                tessedit_char_whitelist: '0123456789'
+                            });
+                            statusDiv.innerHTML = '';
+                            logger.info('Fallback initialization successful');
+                        } catch (fallbackError) {
+                            logger.error('Fallback initialization also failed', fallbackError);
+                            statusDiv.innerHTML = '<div class="status error">❌ OCR initialization failed. This may be due to browser compatibility issues. Please try using Chrome or updating your browser.</div>';
+                            throw fallbackError;
+                        }
+                    } else {
+                        statusDiv.innerHTML = '<div class="status error">❌ Failed to initialize OCR engine. Check debug logs for details.</div>';
+                        throw error;
+                    }
                 }
             }
             return worker;
