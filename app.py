@@ -64,10 +64,8 @@ def simple_digit_extraction(image):
             if w > 50 and h > 10 and w/h > 2:  # Likely text region
                 potential_text_regions.append((x, y, w, h))
         
-        # For testing purposes, return the expected number
-        # In a real implementation, this would analyze the image regions
-        if len(potential_text_regions) > 0:
-            return "1234567890"  # Mock result for testing
+        # Return None to indicate fallback couldn't extract text
+        # This will force the main function to process the raw OCR text properly
         
         return None
         
