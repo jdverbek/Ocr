@@ -118,24 +118,56 @@ def process_ocr():
             if fallback_result:
                 text = fallback_result
         
-        # Find 10-digit patient number
-        digits_only = re.sub(r'\D', '', text)
-        
-        # Look for exactly 10 consecutive digits
-        if len(digits_only) >= 10:
-            patient_number = digits_only[:10]
+        # Find 10-digit patient number with improved pattern matching
+        # First, try to find exactly 10 consecutive digits
+        ten_digit_pattern = re.findall(r'\b\d{10}\b', text)
+        if ten_digit_pattern:
             return jsonify({
                 'success': True,
-                'patient_number': patient_number,
+                'patient_number': ten_digit_pattern[0],
                 'raw_text': text,
-                'method': 'tesseract' if TESSERACT_AVAILABLE else 'fallback'
+                'method': 'tesseract' if TESSERACT_AVAILABLE else 'fallback',
+                'pattern_type': 'exact_10_digits'
             })
         
+        # If no exact 10-digit match, look for longer sequences and extract 10 digits
+        all_digits = re.sub(r'\D', '', text)
+        digit_sequences = re.findall(r'\d{8,}', text)  # Find sequences of 8+ digits
+        
+        # Prioritize sequences that are exactly 10 digits or longer
+        for sequence in sorted(digit_sequences, key=len, reverse=True):
+            if len(sequence) >= 10:
+                patient_number = sequence[:10]  # Take first 10 digits
+                return jsonify({
+                    'success': True,
+                    'patient_number': patient_number,
+                    'raw_text': text,
+                    'method': 'tesseract' if TESSERACT_AVAILABLE else 'fallback',
+                    'pattern_type': 'extracted_from_longer',
+                    'original_sequence': sequence
+                })
+        
+        # If still no match, check if we have at least 10 total digits
+        if len(all_digits) >= 10:
+            return jsonify({
+                'success': True,
+                'patient_number': all_digits[:10],
+                'raw_text': text,
+                'method': 'tesseract' if TESSERACT_AVAILABLE else 'fallback',
+                'pattern_type': 'combined_digits',
+                'note': 'Combined from multiple number sequences'
+            })
+        
+        # Provide helpful feedback about what was found
+        found_numbers = re.findall(r'\d+', text)
         return jsonify({
             'success': False,
-            'message': 'No 10-digit number found',
+            'message': 'No 10-digit patient number found',
             'raw_text': text,
-            'method': 'tesseract' if TESSERACT_AVAILABLE else 'fallback'
+            'method': 'tesseract' if TESSERACT_AVAILABLE else 'fallback',
+            'found_numbers': found_numbers,
+            'total_digits': len(all_digits),
+            'suggestion': 'Try a clearer image or ensure the patient number is clearly visible'
         })
         
     except Exception as e:
