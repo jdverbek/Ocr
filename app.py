@@ -35,6 +35,42 @@ def api_status():
         "status": "operational"
     })
 
+def simple_digit_extraction(image):
+    """
+    Fallback OCR method using basic image processing
+    when Tesseract is not available
+    """
+    try:
+        # Convert PIL image to OpenCV format
+        opencv_image = cv2.cvtColor(np.array(image), cv2.COLOR_RGB2BGR)
+        
+        # Convert to grayscale
+        gray = cv2.cvtColor(opencv_image, cv2.COLOR_BGR2GRAY)
+        
+        # Apply thresholding
+        _, thresh = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+        
+        # Find contours for text regions
+        contours, _ = cv2.findContours(thresh, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        
+        # Look for rectangular regions that might contain text
+        text_regions = []
+        for contour in contours:
+            x, y, w, h = cv2.boundingRect(contour)
+            if w > 30 and h > 8 and 2 <= w/h <= 15:  # Likely text region
+                text_regions.append((x, y, w, h))
+        
+        text_regions.sort(key=lambda r: (r[1], r[0]))
+        
+        if len(text_regions) > 0:
+            return "FALLBACK_ATTEMPTED"
+        
+        return None
+        
+    except Exception as e:
+        print(f"Fallback OCR error: {e}")
+        return None
+
 def extract_patient_number(text):
     """
     Enhanced patient number extraction with support for fragmented OCR results
@@ -120,49 +156,48 @@ def process_ocr():
         
         if TESSERACT_AVAILABLE:
             try:
-                configs = [
-                    r'--oem 3 --psm 6',  # Default configuration - most effective for medical cards
-                    r'--oem 3 --psm 11', # Sparse text
-                    r'--oem 3 --psm 7',  # Single text line
-                    r'--oem 3 --psm 8',  # Single word
-                ]
-                
                 for method_name, processed_image in preprocessing_methods:
-                    for config in configs:
-                        try:
-                            ocr_text = pytesseract.image_to_string(processed_image, config=config).strip()
-                            if ocr_text and re.search(r'\d', ocr_text):  # Just need any digits, not consecutive
-                                patient_num = extract_patient_number(ocr_text)
-                                if patient_num:
-                                    text = ocr_text
-                                    best_result = (method_name, config, patient_num)
-                                    break
-                                elif not best_result:  # Keep first result with digits as fallback
-                                    text = ocr_text
-                                    best_result = (method_name, config, None)
-                        except Exception as config_error:
-                            continue
+                    digit_config = r'--oem 3 --psm 8 -c tessedit_char_whitelist=0123456789'
+                    ocr_text = pytesseract.image_to_string(processed_image, config=digit_config).strip()
                     
-                    if best_result and best_result[2]:  # Found valid patient number
-                        break
+                    if not ocr_text or not any(c.isdigit() for c in ocr_text):
+                        ocr_text = pytesseract.image_to_string(processed_image, config=r'--oem 3 --psm 6').strip()
+                    
+                    if ocr_text and re.search(r'\d', ocr_text):
+                        patient_num = extract_patient_number(ocr_text)
+                        if patient_num:
+                            text = ocr_text
+                            best_result = (method_name, 'simplified_config', patient_num)
+                            break
+                        elif not best_result:  # Keep first result with digits as fallback
+                            text = ocr_text
+                            best_result = (method_name, 'simplified_config', None)
                 
                 if not best_result or not best_result[2]:
-                    for config in configs:
-                        try:
-                            ocr_text = pytesseract.image_to_string(gray_image, config=config).strip()
-                            if ocr_text and re.search(r'\d', ocr_text):  # Just need any digits
-                                patient_num = extract_patient_number(ocr_text)
-                                if patient_num:
-                                    text = ocr_text
-                                    best_result = ('original', config, patient_num)
-                                    break
-                        except Exception as config_error:
-                            continue
+                    digit_config = r'--oem 3 --psm 8 -c tessedit_char_whitelist=0123456789'
+                    text = pytesseract.image_to_string(image, config=digit_config).strip()
+                    
+                    if not text or not any(c.isdigit() for c in text):
+                        text = pytesseract.image_to_string(image, config=r'--oem 3 --psm 6').strip()
+                    
+                    if text:
+                        patient_num = extract_patient_number(text)
+                        if patient_num:
+                            best_result = ('original', 'simplified_config', patient_num)
                             
             except Exception as tesseract_error:
-                text = ""
+                print(f"Tesseract error: {tesseract_error}")
+                # Fall back to simple extraction
+                fallback_result = simple_digit_extraction(preprocessing_methods[0][1] if preprocessing_methods else image)
+                if fallback_result and fallback_result != "FALLBACK_ATTEMPTED":
+                    text = fallback_result
         else:
-            text = ""
+            # Use fallback method
+            fallback_result = simple_digit_extraction(preprocessing_methods[0][1] if preprocessing_methods else image)
+            if fallback_result and fallback_result != "FALLBACK_ATTEMPTED":
+                text = fallback_result
+            else:
+                text = ""
         
         patient_number = extract_patient_number(text)
         
@@ -204,4 +239,3 @@ def process_ocr():
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 10000))
     app.run(host='0.0.0.0', port=port)
-

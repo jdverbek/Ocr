@@ -229,8 +229,9 @@
             };
             reader.readAsDataURL(file);
             
-            // Disable button during processing
+            // Disable buttons during processing
             captureBtn.disabled = true;
+            document.getElementById('uploadBtn').disabled = true;
             statusDiv.innerHTML = '<div class="status processing"><span class="loader"></span> Processing image on server...</div>';
             
             // Convert to base64 and send to server
@@ -261,15 +262,20 @@
                             </div>
                         `;
                     } else {
-                        statusDiv.innerHTML = '<div class="status error">❌ No 10-digit patient number found. Please try again with a clearer image.</div>';
+                        let errorMessage = '❌ No 10-digit patient number found. Please try again with a clearer image.';
+                        if (result.found_numbers && result.found_numbers.length > 0) {
+                            errorMessage += `<br><small>Found numbers: ${result.found_numbers.join(', ')}</small>`;
+                        }
+                        statusDiv.innerHTML = `<div class="status error">${errorMessage}</div>`;
                         resultDiv.innerHTML = '';
                     }
                 } catch (error) {
                     console.error('OCR Error:', error);
-                    statusDiv.innerHTML = '<div class="status error">❌ Error processing image. Please try again.</div>';
+                    statusDiv.innerHTML = '<div class="status error">❌ Error processing image. Please check your connection and try again.</div>';
                     resultDiv.innerHTML = '';
                 } finally {
                     captureBtn.disabled = false;
+                    document.getElementById('uploadBtn').disabled = false;
                 }
             };
             fileReader.readAsDataURL(file);
