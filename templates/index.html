@@ -192,10 +192,18 @@
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"></path>
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z"></path>
             </svg>
-            Get Patient Number from Camera
+            Take Photo
         </button>
         
-        <input type="file" id="fileInput" accept="image/*" capture="environment">
+        <button class="camera-button" id="uploadBtn" style="margin-top: 15px; background: linear-gradient(135deg, #28a745 0%, #20c997 100%);">
+            <svg class="camera-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"></path>
+            </svg>
+            Upload from Photo Library
+        </button>
+        
+        <input type="file" id="cameraInput" accept="image/*" capture="environment">
+        <input type="file" id="fileInput" accept="image/*">
         
         <div class="preview-section" id="previewSection">
             <img id="previewImage" class="preview-image" alt="Captured image">
@@ -315,7 +323,18 @@
         
         // Event listeners
         document.getElementById('captureBtn').addEventListener('click', () => {
+            document.getElementById('cameraInput').click();
+        });
+        
+        document.getElementById('uploadBtn').addEventListener('click', () => {
             document.getElementById('fileInput').click();
+        });
+        
+        document.getElementById('cameraInput').addEventListener('change', (event) => {
+            const file = event.target.files[0];
+            if (file) {
+                processImage(file);
+            }
         });
         
         document.getElementById('fileInput').addEventListener('change', (event) => {
